@@ -1,0 +1,242 @@
+#!/bin/dash
+
+
+
+# ===============================
+# Error Handleing
+# tigger-status don't care???
+if [ ! -d ".tigger" ]
+then
+    echo "tigger-status: error: tigger repository directory .tigger not found"
+    exit 1
+fi
+
+
+################################################################
+################################################################
+# Following commnad is to retrive useful info about tigger, using echo
+# Using echo to print the head branch directory
+headBranch() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "./.tigger/$branchName"
+    fi
+}
+
+
+# Modify commit Id
+commitId() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo "$id"
+    fi
+}
+
+commitIdIncrement() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo $((id+1)) > .tigger/hash.txt
+    fi
+}
+
+getCommitStatus() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            result=$(cat "$head/dataStore/__commit.txt")
+            echo $result
+        fi
+    fi
+}
+
+modifyCommitToTrue() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "1" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+modifyCommitToFalse() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "0" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+getLastCommit() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/log.txt ]
+        then
+            cat $head/log.txt | sort -d -r | head -n 1 | cut -d':' -f1
+        fi
+    fi
+}
+
+################################################################
+###############################################################
+# =============================
+# Global Variable Section
+ID=$(commitId)
+head=$(headBranch)
+dataStore="$head/dataStore"
+logFile="$head/log.txt"
+globalLogFile=".tigger/globalLog.txt"
+commit=$(getCommitStatus)
+lastCommit=$(getLastCommit)
+
+touch __tempFile
+ls . > __tempFile; ls $dataStore >> __tempFile
+
+if [ -d $head/$lastCommit ]
+then 
+    ls $head/$lastCommit >> __tempFile
+fi
+
+content=$(cat __tempFile | sort | uniq)
+for file in $content
+do
+    # Eliminate special files
+    containSpecial=$(echo $file | grep "__" | wc -l)
+    if [ $containSpecial = 1 ]
+    then
+        continue
+    fi
+
+    
+    lastCommit=$(getLastCommit)
+    if [ -f $head/$lastCommit/$file ] && [ -f "$file" ] && [ -f "$dataStore/$file" ]
+    then 
+        repoCurrent=-1   # repo commit
+        repoDataStore=-1 # commit index
+        currDataStore=-1 # repo index
+
+        
+        diff --brief "$head/$lastCommit/$file" "$file" >/dev/null
+        repoCurrent=$(($?))
+
+        # Bewteen repo to commit
+        diff --brief "$head/$lastCommit/$file" "$dataStore/$file" >/dev/null
+        repoDataStore=$(($?))
+
+        # Bewteen repo to commit
+        diff --brief "$file" "$dataStore/$file" >/dev/null
+        currDataStore=$(($?)) 
+
+        # curr is diff to index diff to commit
+        if [ $repoCurrent -eq 0 ] && [ $repoDataStore -eq 0 ] && [ $currDataStore -eq 0 ]
+        then 
+            echo "$file - same as repo"
+            continue
+        fi
+
+        if [ $repoCurrent -eq 0 ] && [ $repoDataStore -ne 0 ] && [ $currDataStore -ne 0 ]
+        then 
+            echo "$file - file changed, different changes staged for commit"
+            continue
+        fi
+
+        if [ $repoCurrent -ne 0 ] && [ $repoDataStore -ne 0 ] && [ $currDataStore -ne 0 ]
+        then 
+            echo "$file - file changed, different changes staged for commit"
+            continue
+        fi
+
+        if [ $repoCurrent -ne 0 ] && [ $currDataStore -ne 0 ]
+        then 
+            echo "$file - file changed, changes not staged for commit"
+            continue
+        fi
+
+        if [ $repoCurrent -eq 0 ] && [ $currDataStore -ne 0 ]
+        then 
+            echo "$file - file changed, changes staged for commit"
+            continue
+        fi
+
+        if [ $repoCurrent -ne 0 ] && [ $currDataStore -eq 0 ]
+        then 
+            echo "$file - file changed, changes staged for commit"
+            continue
+        fi
+
+    fi
+
+    # in dataStore and in commit
+    if [ -f "$head/$lastCommit/$file" ] && [ -f $file ]
+    then 
+        diff --brief "$head/$lastCommit/$file" "$file" >/dev/null
+        currRepo=$(($?))
+        if [ $currRepo -eq 0 ] 
+        then
+            echo "$file - untracked"
+        else 
+            echo "$file - untracked"
+        fi
+        continue
+    fi
+
+    # in dataStore and in commit
+    if [ -f "$dataStore/$file" ] && [ -f $file ]
+    then 
+        diff --brief "$dataStore/$file" "$file" >/dev/null
+        currDataStore=$(($?))
+        if [ $currDataStore -eq 0 ] 
+        then
+            echo "$file - added to index"
+        else 
+            echo "$file - added to index, file changed"
+        fi
+        continue
+    fi
+
+    # in dataStore and in commit
+    if [ -f "$dataStore/$file" ] && [ -f $head/$lastCommit/$file ]
+    then 
+        diff --brief "$head/$lastCommit/$file" "$dataStore/$file" >/dev/null
+        repoDataStore=$(($?))
+        if [ $repoDataStore -eq 0 ] 
+        then
+            echo "$file - file deleted"
+        else 
+            echo "$file - file deleted, different changes staged for commit"
+        fi
+        continue
+    fi
+
+    if [ -f "$file" ] 
+    then 
+        echo "$file - untracked"
+        continue
+    fi
+
+    if [ -f "$dataStore/$file" ]
+    then 
+        echo "$file - added to index, file deleted"
+        continue
+    fi
+
+    if [ -f "$head/$lastCommit/$file" ]
+    then 
+        echo "$file - deleted"
+        continue
+    fi
+
+done
+
+
+rm __tempFile

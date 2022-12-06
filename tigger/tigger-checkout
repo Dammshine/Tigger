@@ -1,0 +1,250 @@
+#!/bin/dash
+
+
+
+# ===============================
+# Error Handleing
+if [ ! -d ".tigger" ]
+then
+    echo "tigger-rm: error: tigger repository directory .tigger not found"
+    exit 1
+fi
+
+# Check if no commits exists
+if [ ! -e ".tigger/globalLog.txt" ]
+then 
+    echo "tigger-checkout: error: this command can not be run until after the first commit"
+    exit 1
+fi
+
+if [ $# -eq 0 ] || [ $# -gt 1 ] 
+then
+    echo "usage: tigger-checkout <branch>"
+    exit 1
+fi
+
+verifyBranch=$(echo $1 | grep -E "^-" | wc -l )
+if [ $# -eq 1 ] && [ $verifyBranch -eq 1 ]
+then 
+    echo "usage: tigger-checkout <branch>"
+    exit 1
+fi
+
+
+
+
+
+
+################################################################
+################################################################
+# Following commnad is to retrive useful info about tigger, using echo
+# Using echo to print the head branch directory
+headBranch() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "./.tigger/$branchName"
+    fi
+}
+
+headBranchName() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "$branchName"
+    fi
+}
+
+
+# Modify commit Id
+commitId() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo "$id"
+    fi
+}
+
+commitIdIncrement() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo $((id+1)) > .tigger/hash.txt
+    fi
+}
+
+getCommitStatus() {
+    if [ -f ./.tigger/head.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/dataStore/__commit.txt ]
+        then
+            result=$(cat "$head/dataStore/__commit.txt")
+            echo $result
+        fi
+    fi
+}
+
+modifyCommitToTrue() {
+    if [ -f ./.tigger/head.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/dataStore/__commit.txt ]
+        then
+            echo "1" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+modifyCommitToFalse() {
+    if [ -f ./.tigger/head.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/dataStore/__commit.txt]
+        then
+            echo "0" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+getLastCommit() {
+    if [ -f ./.tigger/head.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/log.txt ]
+        then
+            cat $head/log.txt | sort -d -r | head -n 1 | cut -d':' -f1
+        fi
+    fi
+}
+
+################################################################
+################################################################
+# =============================
+# Global Variable Section
+ID=$(commitId)
+head=$(headBranch)
+dataStore="$head/dataStore"
+logFile="$head/log.txt"
+globalLogFile=".tigger/globalLog.txt"
+commit=$(getCommitStatus)
+
+# If the directory exist
+if [ ! -d ".tigger/$1" ]
+then
+    echo "tigger-checkout: error: unknown branch '$1'"
+    exit 1
+fi
+
+# First step need to check how many files that were in stage but not commited
+# for current head branch 
+touch __tempFile
+lastCommit=$(getLastCommit)
+prevCommit=$(getLastCommit)
+for fileInCurr in $(ls .)
+do 
+    validFile=$(echo $fileInCurr | grep "_" | wc -l)
+    if [ $validFile -ne 0 ]
+    then 
+        continue
+    fi 
+
+    # Check if the file is in both current and the new branch lasresr commit
+    if [ -f ".tigger/$1/$fileInCurr" ]
+    then
+        # And the file is the same in current branch lattest commit
+        # And is same in the new branch lattest commit
+        # Then skip
+        diff --brief "$head/$lastCommit/$fileInCurr" "$fileInCurr" >/dev/null
+        currLatest=$(($?))
+        diff --brief "$.tigger/$1/$fileInCurr" "$fileInCurr" >/dev/null
+        modiValue=$(($?))
+        if [ $currLatest -eq 0 ] && [ $modiValue -eq 0 ]
+        then
+            continue
+        fi
+
+
+        # And the file is either isn't in current 
+        # branch lastest commit, or is modified from current branch latest commit
+        
+        if [ ! -f "$dataStore/$fileInCurr" ] 
+        then
+            echo $fileInCurr >> __tempFile
+        fi
+
+        diff --brief "$head/$lastCommit/$fileInCurr" "$dataStore/$fileInCurr" >/dev/null
+        compValue=$(($?))
+        if [ $compValue -ne 0 ]
+        then
+            echo $fileInCurr >> __tempFile
+        fi
+    fi
+    
+done
+
+# If __tempFile isn't empty, means can not swicth
+if [ -s __tempFile ]
+then 
+    echo "tigger-checkout: error: Your changes to the following files would be overwritten by checkout:"
+    for file in $(cat __tempFile)
+    do 
+        echo "$file"
+    done
+    rm __tempFile
+    exit 1
+fi
+rm __tempFile
+
+# Else, we can continue to checkout
+# By checkout, we change head to that branch
+# And also replace file in current branch with file in new branch
+prevHead=$(headBranchName)
+#echo "$prevHead"
+branchName=$1
+#echo $prevHead $branchName
+
+sed -i -E "s[^$prevHead\$[$branchName[g" ".tigger/head.txt"
+#cat ".tigger/head.txt"
+
+# Global Variable Section
+ID=$(commitId)
+head=$(headBranch)
+dataStore="$head/dataStore"
+logFile="$head/log.txt"
+globalLogFile=".tigger/globalLog.txt"
+commit=$(getCommitStatus)
+lastCommit=$(getLastCommit)
+
+# Remove everything that is in previous branch staged
+#echo ".tigger/$prevHead/dataStore"
+for fileInPrevStage in $(ls ".tigger/$prevHead/dataStore")
+do 
+    if [ -f $fileInPrevStage ]
+    then 
+        rm $fileInPrevStage
+    fi
+done
+
+
+# Then, we move staged files in this branch to current directory
+for fileInStage in $(ls $dataStore)
+do
+    validFile=$(echo $fileInStage | grep -E "_" | wc -l)
+    #echo $fileInStage $validFile
+    if [ $validFile -ne 0 ]
+    then 
+        #echo $fileInStage
+        continue
+    fi
+    #echo $fileInStage
+
+    if [ -f $fileInStage ]
+    then 
+        rm $fileInStage
+    fi
+
+    cp "$dataStore/$fileInStage" "$fileInStage"
+done
+
+echo "Switched to branch '$branchName'"

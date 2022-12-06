@@ -1,0 +1,39 @@
+#!/bin/dash
+
+# ===============================
+# Error Handleing
+if [ $# -gt 0 ]
+then
+    echo "usage: tigger-init"
+    exit 1
+fi
+
+
+dirName=".tigger"
+
+
+
+# Verify that the directory do not exist
+if test ! -d "$dirName"
+then
+    echo "Initialized empty tigger repository in $dirName"
+    mkdir -p "$dirName"
+
+    # Also initialize for the master branch
+    # And a file that store info about which branch is current master
+    mkdir -p "$dirName/master"
+    mkdir -p "$dirName/master/dataStore"
+    touch "$dirName/head.txt"
+
+    # Store info about current head branch
+    echo "master" > "$dirName/head.txt"
+
+    # Store info about current commit ID
+    echo "0" > "$dirName/hash.txt"
+
+    # Cread a file to record status for next commit
+    echo "0" > "$dirName/master/dataStore/__commit.txt"
+else
+    echo "tigger-init: error: .tigger already exists"
+    exit 0
+fi

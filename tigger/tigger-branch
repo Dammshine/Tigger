@@ -1,0 +1,230 @@
+#!/bin/dash
+
+
+
+# ===============================
+# Error Handleing
+if [ ! -d ".tigger" ]
+then
+    echo "tigger-rm: error: tigger repository directory .tigger not found"
+    exit 1
+fi
+
+if [ $# -gt 2 ] 
+then
+    echo "usage: tigger-branch [-d] <branch>"
+    exit 1
+fi
+
+if [ $# -eq 1 ] && [ $1 = "-d" ]
+then 
+    echo "usage: tigger-branch [-d] <branch>"
+fi
+
+
+if [ $# -eq 2 ] && [ $1 != "-d" ]
+then 
+    echo "usage: tigger-branch [-d] <branch>"
+fi
+
+# Check if no commits exists
+if [ ! -e ".tigger/globalLog.txt" ]
+then 
+    echo "tigger-branch: error: this command can not be run until after the first commit"
+    exit 1
+fi
+
+################################################################
+################################################################
+# Following commnad is to retrive useful info about tigger, using echo
+# Using echo to print the head branch directory
+headBranch() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "./.tigger/$branchName"
+    fi
+}
+
+headBranchName() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "$branchName"
+    fi
+}
+
+
+# Modify commit Id
+commitId() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo "$id"
+    fi
+}
+
+commitIdIncrement() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo $((id+1)) > .tigger/hash.txt
+    fi
+}
+
+getCommitStatus() {
+    if [ -f ./.tigger/head.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/dataStore/__commit.txt ]
+        then
+            result=$(cat "$head/dataStore/__commit.txt")
+            echo $result
+        fi
+    fi
+}
+
+modifyCommitToTrue() {
+    if [ -f ./.tigger/head.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/dataStore/__commit.txt ]
+        then
+            echo "1" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+modifyCommitToFalse() {
+    if [ -f ./.tigger/head.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/dataStore/__commit.txt]
+        then
+            echo "0" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+getLastCommit() {
+    if [ -f ./.tigger/head.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/log.txt ]
+        then
+            cat $head/log.txt | sort -d -r | head -n 1 | cut -d':' -f1
+        fi
+    fi
+}
+
+################################################################
+################################################################
+# =============================
+# Global Variable Section
+ID=$(commitId)
+head=$(headBranch)
+dataStore="$head/dataStore"
+logFile="$head/log.txt"
+globalLogFile=".tigger/globalLog.txt"
+commit=$(getCommitStatus)
+
+
+
+# First case : Print out the branch
+if [ $# -eq 0 ]
+then 
+    # Print out branch name
+    branchName=$(ls .tigger | sed -E "s/ /\n/g" | sort)
+    for name in $branchName
+    do
+        if [ -d ".tigger/$name" ]
+        then 
+            echo $name
+        fi
+    done
+    exit 0
+fi
+
+# Second Case : Create a new branch
+if [ $# -eq 1 ]
+then 
+    # Verify is the branch already exist
+    if [ -d ".tigger/$1" ]
+    then 
+        echo "tigger-branch: error: branch '$1' already exists"
+        exit 1
+    fi 
+
+    # Verify if the name is valid
+    alphaNumeric=$(echo $1 | grep -E "[^0-9a-zA-Z]" | wc -l)
+    if [ $alphaNumeric -eq 1 ]
+    then 
+        echo "tigger-branch: error: invalid branch name '$1'"
+        exit 1
+    fi 
+
+    branchName=$1
+
+    # Copy paste everything from head branch to the new branch
+    cp -R "$head" ".tigger/$branchName"
+
+    # Not print anything
+    exit 0
+fi
+
+
+# Third Case : Delete a branch
+if [ $# -eq 2 ]
+then 
+    # Verify is the branch already exist
+    if [ ! -d ".tigger/$2" ]
+    then 
+        echo "tigger-branch: error: branch '$2' doesn't exist"
+        exit 1
+    fi 
+
+    # Verify if the name is valid
+    alphaNumeric=$(echo $2 | grep -E "[^0-9a-zA-Z]" | wc -l)
+    alphaNumeric2=$(echo $2 | grep -E "^[0-9]" | wc -l)
+    if [ $alphaNumeric -eq 1 ] || [ $alphaNumeric2 -eq 1 ]
+    then 
+        echo "tigger-branch: error: invalid branch name '$2'"
+        exit 1
+    fi 
+
+    branchName=$2
+
+    # Need to verify if the deleted branch have unmerged change
+    if [ ".tigger/$branchName" = "$head" ]
+    then
+        echo "tigger-branch: error: cannot delete current branch '$2'"
+        exit 1
+    fi
+
+    if [ ".tigger/$branchName" = ".tigger/master" ]
+    then
+        echo "tigger-branch: error: can not delete branch 'master'"
+        exit 1
+    fi
+
+    # Need to verify if that branch can be deleted
+    prevHead=$(headBranchName)
+    #echo "$prevHead"
+    sed -i -E 's["$prevHead"["$branchName"[g' ".tigger/head.txt"
+    modifyStatus=$(getCommitStatus)
+    sed -i -E 's["$prevHead"["$branchName"[g' ".tigger/head.txt"
+    
+
+    if [ $modifyStatus -eq 1 ] 
+    then 
+        echo "tigger-branch: error: branch '$branchName' has unmerged changes"
+        exit 1
+    fi
+
+    # Then delete that branch
+    rm -rf ".tigger/$branchName"
+    echo "Deleted branch '$branchName'"
+
+    # Not print anything
+    exit 0
+fi

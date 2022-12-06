@@ -1,0 +1,84 @@
+#!/bin/dash
+
+# Helper function format
+# 1. Always use local variables to avoid collisions. 
+# 2. Don't have response to check argument number.
+# 3. 
+
+################################################################
+################################################################
+# Following commnad is to retrive useful info about tigger, using echo
+# Using echo to print the head branch directory
+headBranch() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "./.tigger/$branchName"
+    fi
+}
+
+
+# Modify commit Id
+commitId() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo "$id"
+    fi
+}
+
+commitIdIncrement() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo $((id+1)) > .tigger/hash.txt
+    fi
+}
+
+getCommitStatus() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            result=$(cat "$head/dataStore/__commit.txt")
+            echo $result
+        fi
+    fi
+}
+
+modifyCommitToTrue() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "1" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+modifyCommitToFalse() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "0" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+getLastCommit() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/log.txt ]
+        then
+            cat $head/log.txt | sort -d -r | head -n 1 | cut -d':' -f1
+        fi
+    fi
+}
+
+################################################################
+################################################################

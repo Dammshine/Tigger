@@ -1,0 +1,167 @@
+#!/bin/dash
+
+
+
+
+
+# ===============================
+# Error Handleing
+if [ ! -d ".tigger" ]
+then
+    echo "tigger-show: error: tigger repository directory .tigger not found"
+    exit 1
+fi
+
+if [ $# -eq 0 ] || [ $# -gt 1 ]
+then
+    echo "usage: tigger-show <commit>:<filename>"
+    exit 1
+fi 
+
+formatCheck=$(echo $1 | grep -E ":")
+if [ $# -eq 1 ] && [ -z $formatCheck ]
+then
+    echo "tigger-show: error: invalid object $1"
+    exit 1
+fi 
+
+
+################################################################
+################################################################
+# Following commnad is to retrive useful info about tigger, using echo
+# Using echo to print the head branch directory
+headBranch() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "./.tigger/$branchName"
+    fi
+}
+
+
+# Modify commit Id
+commitId() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo "$id"
+    fi
+}
+
+commitIdIncrement() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo $((id+1)) > .tigger/hash.txt
+    fi
+}
+
+getCommitStatus() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            result=$(cat "$head/dataStore/__commit.txt")
+            echo $result
+        fi
+    fi
+}
+
+modifyCommitToTrue() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "1" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+modifyCommitToFalse() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "0" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+getLastCommit() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/log.txt ]
+        then
+            cat $head/log.txt | sort -d -r | head -n 1 | cut -d':' -f1
+        fi
+    fi
+}
+
+################################################################
+###############################################################
+# =============================
+# Global Variable Section
+ID=$(commitId)
+head=$(headBranch)
+dataStore="$head/dataStore"
+logFile="$head/log.txt"
+globalLogFile=".tigger/globalLog.txt"
+commit=$(getCommitStatus)
+
+# Need to go through directory in .tigger and find the branch
+# grep both argument
+num=$(echo $1 | sed -E "s/([^:]*):(.*)/\1/")
+fileName=$(echo $1 | sed -E "s/([^:]*):(.*)/\2/")
+
+# first situation, not supplied a number
+if [ -z $num ]
+then
+    # Go through this filename in the index
+    if [ -f $dataStore/$fileName ]
+    then
+        cat $dataStore/$fileName
+        exit 0
+    fi
+
+    # Else file do not exist in the index
+    echo "tigger-show: error: '$fileName' not found in index"
+    exit 1
+fi
+
+# Second situation, with a commit id
+
+# Verify the argument is valid
+if [ ! -n "$num" ] && [ ! "$num" -eq "$num" ]
+then
+    echo "tigger-show: error: unknown commit '$num'"
+    exit 1
+fi
+
+dir=$(cat $globalLogFile | grep -E "^$num:(.*)" | sed -E "s/([0-9]*):(.*)/\2/")
+targetDir=$dir/$num
+
+# Verify if the commit Id exist
+if [ -z $dir ]
+then
+    echo "tigger-show: error: unknown commit '$num'"
+    exit 1
+fi
+
+
+for CommitFile in $(ls $targetDir)
+do
+    if [ $CommitFile = "$fileName" ]
+    then
+        cat $targetDir/$CommitFile
+        exit 0
+    fi
+done
+
+# means file not found
+echo "tigger-show: error: '$fileName' not found in commit $num"
+exit 1
+

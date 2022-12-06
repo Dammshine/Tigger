@@ -1,0 +1,136 @@
+#!/bin/dash
+
+for file in "$@":
+do
+    filenames=$file
+    checkSpecial=$(echo $filenames | grep ":" | wc -c)
+    #echo $checkSpecial
+    if [ $checkSpecial -ne 0 ]
+    then
+        filenames=$(echo $filenames | sed 's/.$//')
+    fi
+    #echo $filenames
+
+    # Treat as one file
+    if [ -f $filenames ]
+    then
+        # Case one, already an extension
+        parse=$(echo $filenames | grep '\.' | wc -l)
+        if [ $parse -eq 1 ]
+        then
+            echo "# $filenames already has an extension"
+            continue
+        fi
+
+        # Case 2
+        firstline=$(cat $filenames | head -1 | grep '#!' | grep .)
+        count=$(echo $firstline | wc -c)
+        if [ $count -eq 1 ]
+        then
+            echo "# $filenames does not have a #! line"
+            continue
+        fi
+
+        # Then further parse the content
+        extension=$(echo "$firstline" | sed -E 's?^(.*)bin/??g')
+        pythoncheck=$(echo $extension | grep "python")
+        shcheck=$(echo $extension | grep "sh")
+        perlcheck=$(echo $extension | grep "perl")
+
+        if [ "$pythoncheck" != "" ]
+        then
+            # Check if it exist
+            if [ -f "$filenames.py" ]
+            then
+                echo "# $filenames.py already exists"
+                continue
+            fi
+            echo "mv $filenames $filenames.py"
+        elif [ "$shcheck" != "" ]
+        then
+            # Check if it exist
+            if [ -f "$filenames.sh" ]
+            then
+                echo "# $filenames.sh already exists"
+                continue
+            fi
+            echo "mv $filenames $filenames.sh"
+        elif [ "$perlcheck" != "" ]
+        then
+            # Check if it exist
+            if [ -f "$filenames.pl" ]
+            then
+                echo "# $filenames.pl already exists"
+                continue
+            fi
+            echo "mv $filenames $filenames.pl"
+        else
+            echo "# $filenames no extension for #! line"
+        fi
+        continue
+    fi
+
+    # Otherwise multiple files
+    for filename in $filenames
+    do
+        checkSpecial=$(echo $filename | grep ":" | wc -c)
+        if [ $checkSpecial -ne 0 ]
+        then
+            filename=$(echo $filename | sed 's/.$//')
+        fi
+
+        # Case one, already an extension
+        parse=$(echo $filename | grep '\.' | wc -l)
+        if [ $parse -eq 1 ]
+        then
+            echo "# $filename already has an extension"
+            continue
+        fi
+
+        # Case 2
+        firstline=$(cat $filename | head -1 | grep '#!' | grep .)
+        count=$(echo $firstline | wc -c)
+        if [ $count -eq 1 ]
+        then
+            echo "# $filename does not have a #! line"
+            continue
+        fi
+
+        # Then further parse the content
+        extension=$(echo "$firstline" | sed -E 's?^(.*)bin/??g')
+        pythoncheck=$(echo $extension | grep "python")
+        shcheck=$(echo $extension | grep "sh")
+        perlcheck=$(echo $extension | grep "perl")
+
+        if [ "$pythoncheck" != "" ]
+        then
+            # Check if it exist
+            if [ -f "$filename.py" ]
+            then
+                echo "# $filename.py already exists"
+                continue
+            fi
+            echo "mv $filename $filename.py"
+        elif [ "$shcheck" != "" ]
+        then
+            # Check if it exist
+            if [ -f "$filename.sh" ]
+            then
+                echo "# $filename.sh already exists"
+                continue
+            fi
+            echo "mv $filename $filename.sh"
+        elif [ "$perlcheck" != "" ]
+        then
+            # Check if it exist
+            if [ -f "$filename.pl" ]
+            then
+                echo "# $filename.pl already exists"
+                continue
+            fi
+            echo "mv $filename $filename.pl"
+        else
+            echo "# $filename no extension for #! line"
+        fi
+    done
+done

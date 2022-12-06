@@ -1,0 +1,238 @@
+#!/bin/dash
+
+
+
+# ===============================
+# Error Handleing
+if [ ! -d ".tigger" ]
+then
+    echo "tigger-commit: error: tigger repository directory .tigger not found"
+    exit 1
+fi
+
+if [ $# -gt 3 ] || [ $# -lt 2 ]
+then
+    echo "usage: tigger-commit [-a] -m commit-message"
+    exit 1
+fi
+
+if [ $# -eq 2 ] && [ $1 \!= "-m" ]
+then
+    echo "usage: tigger-commit [-a] -m commit-message"
+    exit 1
+fi
+
+if [ $# -eq 3 ] && [ $1 \!= "-a" ] && [ $1 \!= "-m" ] 
+then
+    echo "usage: tigger-commit [-a] -m commit-message"
+    exit 1
+fi
+
+
+################################################################
+################################################################
+# Following commnad is to retrive useful info about tigger, using echo
+# Using echo to print the head branch directory
+headBranch() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "./.tigger/$branchName"
+    fi
+}
+
+
+# Modify commit Id
+commitId() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo "$id"
+    fi
+}
+
+commitIdIncrement() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo $((id+1)) > .tigger/hash.txt
+    fi
+}
+
+getCommitStatus() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            result=$(cat "$head/dataStore/__commit.txt")
+            echo $result
+        fi
+    fi
+}
+
+modifyCommitToTrue() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "1" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+modifyCommitToFalse() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "0" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+getLastCommit() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/log.txt ]
+        then
+            cat $head/log.txt | sort -d -r | head -n 1 | cut -d':' -f1
+        fi
+    fi
+}
+
+################################################################
+###############################################################
+# =============================
+# Global Variable Section
+ID=$(commitId)
+head=$(headBranch)
+dataStore="$head/dataStore"
+logFile="$head/log.txt"
+globalLogFile=".tigger/globalLog.txt"
+commit=$(getCommitStatus)
+
+
+
+
+# Check if Head directory exist, or empty
+# If not, nothing to commit
+if test ! -d "$dataStore" 
+then
+    echo "nothing to commit"
+    exit 0
+fi
+
+
+
+##############################################
+# Case 1: With add flag
+if [ $# -eq 3 ] 
+then
+    
+    # Go through the Head directory and inspect file
+    for fileInTigger in $(ls $dataStore)
+    do 
+        # should skip the one for commit
+        if [ $fileInTigger = "__commit.txt" ]
+        then 
+            continue
+        fi 
+
+        # Update if there is file being deleted
+        if [ ! -f $fileInTigger ]
+        then 
+            rm "$dataStore/$fileInTigger"
+            modifyCommitToTrue
+        fi
+
+        # Update files according to the current directory
+        diff --brief "$fileInTigger" "$dataStore/$fileInTigger" >/dev/null
+        #echo "$fileInTigger" "$dataStore/$fileInTigger"
+        #cat "$fileInTigger"
+        #cat "$dataStore/$fileInTigger"
+        compValue=$(($?))
+        if [ $compValue -eq 0 ]
+        then
+            continue
+        else
+            #echo "Update"
+            # Update, also update the commit flag
+            modifyCommitToTrue
+            rm -f "$dataStore/$fileInTigger"
+            cp "$fileInTigger" "$dataStore/$fileInTigger"
+        fi
+    done
+
+    commit=$(getCommitStatus)
+    # Check if no need to commit
+    if [ $commit -eq  0 ]
+    then
+        echo "nothing to commit"
+        exit 0
+    fi
+    
+    
+
+    # create new directory for this commit in headerBranch
+    mkdir "$head/$ID"
+    commitDirectory="$head/$ID"
+    echo "$3" > "$commitDirectory/__message.txt"
+
+
+    # Go through the Head directory and inspect file
+    for fileInTigger in $(ls $head/dataStore)
+    do 
+        # should skip the one for commit
+        if [ $fileInTigger = "__commit.txt" ]
+        then 
+            continue
+        fi 
+
+        cp "$head/dataStore/$fileInTigger" "$commitDirectory/$fileInTigger"
+    done
+    
+    # Modify commit status to false
+    modifyCommitToFalse
+    echo "Committed as commit $ID"
+    echo "$ID:$3" >> $logFile
+    echo "$ID:$head" >> $globalLogFile
+else
+    # Check if no need to commit
+    if [ $commit -eq  0 ]
+    then
+        echo "nothing to commit"
+        exit 0
+    fi
+
+    # create new directory for this commit in headerBranch
+    mkdir "$head/$ID"
+    commitDirectory="$head/$ID"
+    echo "$2" > "$commitDirectory/__message.txt"
+
+    # Go through the Head directory and inspect file
+    for fileInTigger in $(ls $head/dataStore)
+    do 
+        # should skip the one for commit
+        if [ $fileInTigger = "__commit.txt" ]
+        then 
+            continue
+        fi 
+
+        cp "$head/dataStore/$fileInTigger" "$commitDirectory/$fileInTigger"
+    done
+    # Modify commit status to false
+    modifyCommitToFalse
+    echo "Committed as commit $ID"
+    echo "$ID:$2" >> $logFile
+    echo "$ID:$head" >> $globalLogFile
+fi
+
+
+
+### Function
+commitIdIncrement
+### Function

@@ -1,0 +1,271 @@
+#!/bin/dash
+
+
+
+# ===============================
+# Error Handleing
+if [ ! -d ".tigger" ]
+then
+    echo "tigger-rm: error: tigger repository directory .tigger not found"
+    exit 1
+fi
+
+if [ $# -gt 2 ] && [ $1 = "--cached" ] && [ $2 = "--force" ]
+then
+    echo "tigger-rm: error: tigger repository directory .tigger not found"
+    exit 1
+fi
+
+if [ $# -eq 0 ]
+then 
+    echo "usage: tigger-rm [--force] [--cached] <filenames>"
+fi
+
+forceFlag=0
+cachedFlag=0
+while [ -n "$1" ]
+do
+    case "$1" in
+        --force) forceFlag=1;;
+        --cached) cachedFlag=1;;
+        *) break;;
+    esac
+    shift
+done
+
+################################################################
+################################################################
+# Following commnad is to retrive useful info about tigger, using echo
+# Using echo to print the head branch directory
+headBranch() {
+    if [ -f ./.tigger/head.txt ]
+    then
+        branchName=$(cat ./.tigger/head.txt)
+        echo "./.tigger/$branchName"
+    fi
+}
+
+
+# Modify commit Id
+commitId() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo "$id"
+    fi
+}
+
+commitIdIncrement() {
+    if [ -f ./.tigger/hash.txt ]
+    then
+        id=$(cat ./.tigger/hash.txt)
+        echo $((id+1)) > .tigger/hash.txt
+    fi
+}
+
+getCommitStatus() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            result=$(cat "$head/dataStore/__commit.txt")
+            echo $result
+        fi
+    fi
+}
+
+modifyCommitToTrue() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "1" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+modifyCommitToFalse() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f ./.tigger/hash.txt ]
+        then
+            echo "0" > "$head/dataStore/__commit.txt"
+        fi
+    fi
+}
+
+getLastCommit() {
+    if [ -f ./.tigger/hash.txt ] 
+    then
+        local head=$(headBranch)
+        if [ -f $head/log.txt ]
+        then
+            cat $head/log.txt | sort -d -r | head -n 1 | cut -d':' -f1
+        fi
+    fi
+}
+
+################################################################
+################################################################
+# =============================
+# Global Variable Section
+ID=$(commitId)
+head=$(headBranch)
+dataStore="$head/dataStore"
+logFile="$head/log.txt"
+globalLogFile=".tigger/globalLog.txt"
+commit=$(getCommitStatus)
+
+
+# First Case : No flag
+if [ $forceFlag -eq 0 ] && [ $cachedFlag -eq 0 ]
+then
+    for fileNeedDelete in $@
+    do 
+        if [ ! -f $dataStore/$fileNeedDelete ] 
+        then 
+            echo "tigger-rm: error: '$fileNeedDelete' is not in the tigger repository"
+            continue
+        fi
+
+        # Check if it have being staged
+        lastCommit=$(getLastCommit)
+        repoCurrent=-1   # repo commit
+        repoDataStore=-1 # commit index
+        currDataStore=-1 # repo index
+
+        if [ -f "$head/$lastCommit/$fileNeedDelete" ] && [ -f "$fileNeedDelete" ]
+        then 
+            # Bewteen repo to commit
+            diff --brief "$head/$lastCommit/$fileNeedDelete" "$fileNeedDelete" >/dev/null
+            repoCurrent=$(($?))
+        fi 
+        if [ -f "$head/$lastCommit/$fileNeedDelete" ] && [ -f "$dataStore/$fileNeedDelete" ]
+        then 
+            # Bewteen repo to commit
+            diff --brief "$head/$lastCommit/$fileNeedDelete" "$dataStore/$fileNeedDelete" >/dev/null
+            repoDataStore=$(($?))
+        fi 
+        if [ -f "$fileNeedDelete" ] && [ -f "$dataStore/$fileNeedDelete" ]
+        then 
+            # Bewteen repo to commit
+            diff --brief "$fileNeedDelete" "$dataStore/$fileNeedDelete" >/dev/null
+            currDataStore=$(($?))
+        fi 
+
+        if [ ! -f "$head/$lastCommit/$fileNeedDelete" ] && [ -f "$dataStore/$fileNeedDelete" ]
+        then 
+            echo "tigger-rm: error: '$fileNeedDelete' has staged changes in the index"
+            continue
+        fi
+
+        if [ $repoCurrent -ne 0 ] && [ $repoDataStore -eq 0 ] 
+        then
+            echo "tigger-rm: error: '$fileNeedDelete' in the repository is different to the working file"
+            continue
+        elif [ $repoDataStore -ne 0 ] && [ $currDataStore -ne 0 ] 
+        then
+            echo "tigger-rm: error: '$fileNeedDelete' in index is different to both the working file and the repository"
+            continue
+        elif [ $repoDataStore -ne 0 ] 
+        then
+            echo "tigger-rm: error: '$fileNeedDelete' has staged changes in the index"
+            continue
+        fi
+        
+        # The end of all situation
+        # Means able to delete
+        modifyCommitToTrue
+        rm $dataStore/$fileNeedDelete
+        rm $fileNeedDelete
+    done
+fi
+
+# Second Case : With only force flag
+if [ $forceFlag -eq 1 ] && [ $cachedFlag -eq 0 ]
+then
+    for fileNeedDelete in $@
+    do 
+        if [ ! -f $dataStore/$fileNeedDelete ] 
+        then 
+            echo "tigger-rm: error: '$fileNeedDelete' is not in the tigger repository"
+            continue
+        fi
+
+        if [ ! -f $fileNeedDelete ]
+        then
+            modifyCommitToTrue
+            rm $dataStore/$fileNeedDelete
+        else 
+            modifyCommitToTrue
+            rm $fileNeedDelete
+            rm $dataStore/$fileNeedDelete
+        fi
+    done
+fi
+
+# Third Case : With only cached flag
+if [ $forceFlag -eq 0 ] && [ $cachedFlag -eq 1 ]
+then
+    for fileNeedDelete in $@
+    do 
+        if [ ! -f $dataStore/$fileNeedDelete ] 
+        then 
+            echo "tigger-rm: error: '$fileNeedDelete' is not in the tigger repository"
+            continue
+        fi
+
+        lastCommit=$(getLastCommit)
+        repoCurrent=-1   # repo commit
+        repoDataStore=-1 # commit index
+        currDataStore=-1 # repo index
+
+        if [ -f "$head/$lastCommit/$fileNeedDelete" ] && [ -f "$fileNeedDelete" ]
+        then 
+            # Bewteen repo to commit
+            diff --brief "$head/$lastCommit/$fileNeedDelete" "$fileNeedDelete" >/dev/null
+            repoCurrent=$(($?))
+        fi 
+        if [ -f "$head/$lastCommit/$fileNeedDelete" ] && [ -f "$dataStore/$fileNeedDelete" ]
+        then 
+            # Bewteen repo to commit
+            diff --brief "$head/$lastCommit/$fileNeedDelete" "$dataStore/$fileNeedDelete" >/dev/null
+            repoDataStore=$(($?))
+        fi 
+        if [ -f "$fileNeedDelete" ] && [ -f "$dataStore/$fileNeedDelete" ]
+        then 
+            # Bewteen repo to commit
+            diff --brief "$fileNeedDelete" "$dataStore/$fileNeedDelete" >/dev/null
+            currDataStore=$(($?))
+        fi 
+
+        if [ $repoDataStore -ne 0 ] && [ $currDataStore -ne 0 ] 
+        then
+            echo "tigger-rm: error: '$fileNeedDelete' in index is different to both the working file and the repository"
+            continue
+        fi
+        
+        # The end of all situation
+        # Means able to delete
+        modifyCommitToTrue
+        rm $dataStore/$fileNeedDelete
+    done
+fi
+
+# Fourth Case : With Both flag
+if [ $forceFlag -eq 1 ] && [ $cachedFlag -eq 1 ]
+then
+    for fileNeedDelete in $@
+    do 
+        if [ ! -f $dataStore/$fileNeedDelete ] 
+        then 
+            echo "tigger-rm: error: '$fileNeedDelete' is not in the tigger repository"
+            continue
+        fi
+        modifyCommitToTrue
+        rm $dataStore/$fileNeedDelete
+    done
+fi
